@@ -9,6 +9,7 @@ import cgi
 import json
 import sys
 import os
+import html
 
 class myHandler(BaseHTTPRequestHandler):
     # Handler for the GET requests
@@ -17,11 +18,19 @@ class myHandler(BaseHTTPRequestHandler):
         self.send_response(200, 'OK')
         self.send_header('Content-type','text/html')
         self.end_headers()
-        data = ""
+        host = ""
         with open("/home/canadabot/canadabot2.0/gitdiff.txt") as f:
-            data = f.read()
+            data = f.readlines()
+            for line in data:
+                escape = html.escape(line)
+                if line.startswith("+"):
+                    escape = "<font color='green'>" + escape + "</font>"
+                elif line.startswith("-"):
+                    escape = "<font color='red'>" + escape + "</font>"
+                escape =  escape + "<br>"
+                host += escape
         # Send the html message
-        self.wfile.write(bytes(data, "UTF-8"))
+        self.wfile.write(bytes(host, "UTF-8"))
 
     def do_POST(self):
         content_len = int(self.headers['Content-Length'])
@@ -32,7 +41,7 @@ class myHandler(BaseHTTPRequestHandler):
 
         post_body = self.rfile.read(content_len)
         parse = json.loads(post_body.decode('utf-8'))
-        print("Received push event for" + parse["repository"]["name"])
+        print("Received push event for - " + parse["repository"]["name"])
 
         commits = parse["commits"]
         filestr = ""
@@ -48,7 +57,7 @@ class myHandler(BaseHTTPRequestHandler):
                 return 0
             for item in added:
                 filestr += "," + str(item)
-        with open("/home/canadabot/canadabot2.0/gitpost.txt", "w") as f:
+        with open("/home/canadabot/canadabot2.0/hooks/gitpost.txt", "w") as f:
             f.write(filestr)
         print(filestr)
 
@@ -76,13 +85,13 @@ class Gitbot(object):
         result = ""
         try:
             os.chdir(self.repo)
-            p = subprocess.Popen(["git", "checkout", self.branch])
+            p = subprocess.Popen(["git", "checkout", self.branch], stdout=subprocess.PIPE)
             result = p.communicate()[0].decode("unicode_escape")
 
-            p = subprocess.Popen(["git", "pull", self.remote, self.branch])
+            p = subprocess.Popen(["git", "pull", self.remote, self.branch], stdout=subprocess.PIPE)
             result += p.communicate()[0].decode("unicode_escape")
         except:
-            return result
+            return "Error Pulling"
         return result
 
     def push(self):
@@ -115,9 +124,9 @@ class Gitbot(object):
     def diff(self, f=None):
         os.chdir(self.repo)
         if f == None:
-            p = subprocess.Popen(["git", "diff", self.repo])
+            p = subprocess.Popen(["git", "diff", self.repo], stdout=subprocess.PIPE)
         else:
-            p = subprocess.Popen(["git", "diff", f])
+            p = subprocess.Popen(["git", "diff", f], stdout=subprocess.PIPE)
         try:
             output = p.communicate()[0].decode("unicode_escape")
         except:
@@ -125,11 +134,11 @@ class Gitbot(object):
         return output
 
     def host(self, msg):
-        with open("/home/canadabot/canadabot2.0/gitdiff.txt", "w+") as f:
+        with open("/home/canadabot/canadabot2.0/gitdiff.txt", "w") as f:
             f.write(msg)
 
     def webhook_file(self):
-        with open("/home/canadabot/canadabot2.0/gitpost.txt") as f:
+        with open("/home/canadabot/canadabot2.0/hooks/gitpost.txt") as f:
             data = f.read()
         return data
 
